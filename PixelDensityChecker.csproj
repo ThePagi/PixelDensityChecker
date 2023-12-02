@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="CommandLineParser" Version="2.9.1" />
     <PackageReference Include="DirectXTexNet" Version="1.0.3" />
     <PackageReference Include="niflysharp" Version="1.3.0" />
   </ItemGroup>

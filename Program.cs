@@ -1,8 +1,17 @@
 ﻿using nifly;
 using System.Diagnostics;
+using CommandLine;
 
 internal class Program
 {
+    public class Args
+    {
+        [Option('f', "filter", Required = false, Default = "*.nif", HelpText = "A pattern that filters input files. Default is '*.nif'. Only supports literals, * for any sequence of characters, ? for zero or one character. Example to read only grounds: *ground*.nif")]
+        public String FileFilter { get; set; }
+        [Option('e', "exclude", Required = false, Default = new string[] { "_lod", "lod.", "\\sky\\" }, HelpText = "Input one or more names. Excludes files that the names in their path. By default contains '_lod', 'lod.' and '\\sky\\'.")]
+        public IEnumerable<string> Exclude { get; set; }
+    }
+
     static (double, double, double) AnalyzeShape(vectorTriangle tris, vectorVector3 verts, vectorVector2 uvs)
     {
         var results = new List<double>();
@@ -32,7 +41,7 @@ internal class Program
         return (results[0], results[results.Count / 2], results[results.Count - 1]);
     }
 
-    static (double, double) AnalyzeNif(string path, TextWriter w)
+    static (double, double) AnalyzeNif(string path, TextWriter w, Dictionary<string, (int, double, double, double)>  texVals)
     {
         var nif = new NifFile();
         if (nif.Load(path) != 0)
@@ -55,16 +64,16 @@ internal class Program
             shape.GetTriangles(tris);
             var verts = nif.GetVertsForShape(shape);
             var uvs = nif.GetUvsForShape(shape);
-            var tex_size = 0;
-            var tex_path = nif.GetTexturePathByIndex(shape, 0);
+            var texSize = 0;
+            var texPath = nif.GetTexturePathByIndex(shape, 0);
             try
             {
-                var tex = DirectXTexNet.TexHelper.Instance.LoadFromDDSFile(tex_path, DirectXTexNet.DDS_FLAGS.NONE);
-                tex_size = Math.Max(tex.GetMetadata().Width, tex.GetMetadata().Height);
+                var tex = DirectXTexNet.TexHelper.Instance.LoadFromDDSFile(texPath, DirectXTexNet.DDS_FLAGS.NONE);
+                texSize = Math.Max(tex.GetMetadata().Width, tex.GetMetadata().Height);
             }
             catch (Exception e)
             {
-                Console.WriteLine($"Can't load texture {tex_path}.");
+                Console.WriteLine($"Can't load texture {texPath}.");
             }
             var (min, med, max) = AnalyzeShape(tris, verts, uvs);
             totalMin = Math.Min(min, totalMin);
@@ -75,18 +84,34 @@ internal class Program
             w.Write(",{0}", min.ToString("0.00e+0"));
             w.Write(",{0}", med.ToString("0.00e+0"));
             w.Write(",{0}", max.ToString("0.00e+0"));
-            w.Write(",{0}", tex_path);
-            if (tex_size > 0)
+            w.Write(",{0}", texPath);
+            if (texSize > 0)
             {
-                min *= tex_size;
-                med *= tex_size;
-                max *= tex_size;
+                min *= texSize;
+                med *= texSize;
+                max *= texSize;
                 texTotalMin = Math.Min(min, texTotalMin);
                 texTotalMax = Math.Max(max, texTotalMax);
                 texTotalAvg += med;
                 w.Write(",{0}", min.ToString("0.00e+0"));
                 w.Write(",{0}", med.ToString("0.00e+0"));
                 w.Write(",{0}", max.ToString("0.00e+0"));
+                (int, double, double, double) vals;
+                if (texVals.TryGetValue(texPath, out vals))
+                {
+                    vals.Item1 += 1;
+                    vals.Item2 = Math.Min(min, vals.Item2);
+                    vals.Item3 += med;
+                    vals.Item4 = Math.Max(max, vals.Item4);
+                    texVals[texPath] = vals;
+                }
+                else {
+                    vals.Item1 = 1;
+                    vals.Item2 = min;
+                    vals.Item3 = med;
+                    vals.Item4 = max;
+                    texVals.Add(texPath, vals);
+                }
             }
             else {
                 w.Write(",,,");
@@ -110,16 +135,16 @@ internal class Program
         }
         return (totalAvg, texTotalAvg);
     }
-    private static void Main(string[] args)
+    private static void Main(string[] rawArgs)
     {
-        if (args.Length > 0)
-        {
-            AnalyzeNif(args[0], Console.Out);
-        }
+        var args = Parser.Default.ParseArguments<Args>(rawArgs).Value;
+
         var results = new List<(String, double, double)>();
         var out_path = "pixel_density.csv";
         var out_path_sorted = "pixel_density_sorted.csv";
         var out_path_sorted2 = "pixel_density_sorted_textures.csv";
+        var out_path_tex = "pixel_density_by_texture.csv";
+        var texVals = new Dictionary<string, (int, double, double, double)>();
         using (TextWriter writer = new StreamWriter(out_path))
         {
             Console.WriteLine(">>> Starting search for all .nif recursively from {0}", Directory.GetCurrentDirectory());
@@ -128,7 +153,7 @@ internal class Program
             string[] paths;
             try
             {
-                paths = Directory.GetFiles(".", "*.nif", SearchOption.AllDirectories);
+                paths = Directory.GetFiles(".", args.FileFilter, SearchOption.AllDirectories);
             }
             catch (Exception e)
             {
@@ -137,9 +162,16 @@ internal class Program
             }
             foreach (var path in paths)
             {
-                Console.WriteLine("Processing {0}", path);
-                var (avg, tex_avg) = AnalyzeNif(path, writer);
-                results.Add((path, avg, tex_avg));
+                if (args.Exclude.Any(str => path.Contains(str)))
+                {
+                    Console.WriteLine("Ignoring {0}", path);
+                }
+                else
+                {
+                    Console.WriteLine("Processing {0}", path);
+                    var (avg, tex_avg) = AnalyzeNif(path, writer, texVals);
+                    results.Add((path, avg, tex_avg));
+                }
             }
         }
         results.Sort((one, two) => one.Item2.CompareTo(two.Item2));
@@ -162,10 +194,18 @@ internal class Program
                     writer.WriteLine("{0},{1},{2}", res.Item1, res.Item2.ToString("0.00e+0"), res.Item3.ToString("0.00e+0"));
             }
         }
-        Console.WriteLine(">>> Result files available in {0}, {1}, {2}, opening {0} now!", out_path, out_path_sorted, out_path_sorted2);
+        using (TextWriter writer = new StreamWriter(out_path_tex))
+        {
+            writer.WriteLine("Texture,Shape Count,Minimum,Average,Maximum");
+            var texLst = texVals.Select(kv => (kv.Key, (kv.Value.Item1, kv.Value.Item2, kv.Value.Item3/kv.Value.Item1, kv.Value.Item4))).OrderBy(kv => kv.Item2.Item3).ToList();
+            foreach (var (k, v) in texLst) {
+                writer.WriteLine("{0},{1},{2},{3},{4}", k, v.Item1, v.Item2.ToString("0.00e+0"), (v.Item3 / v.Item1).ToString("0.00e+0"), v.Item4.ToString("0.00e+0"));
+            }
+        }
+        Console.WriteLine(">>> Result files available in {0}, {1}, {2}, {3}, opening {2} now!", out_path, out_path_sorted, out_path_sorted2, out_path_tex);
         ProcessStartInfo psi = new ProcessStartInfo();
         //psi.WorkingDirectory = Directory.GetCurrentDirectory();
-        psi.FileName = out_path;
+        psi.FileName = out_path_sorted2;
         psi.UseShellExecute = true;
         Process.Start(psi);
     }
