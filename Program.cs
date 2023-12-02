@@ -97,10 +97,10 @@ internal class Program
         {
             totalAvg /= nif.GetShapes().Count;
             texTotalAvg /= nif.GetShapes().Count;
-            w.Write("{0},{1},{2},{3},{4}", path, "WHOLE MESH", totalMin.ToString("0.00e+0"), totalAvg.ToString("0.00e+0"), totalMax.ToString("0.00e+0"));
+            w.Write("{0},{1},{2},{3},{4}", path, "ALL_SHAPES", totalMin.ToString("0.00e+0"), totalAvg.ToString("0.00e+0"), totalMax.ToString("0.00e+0"));
             if (texTotalMax > 0.0)
             {
-                w.Write(",{0},{1},{2},{3}", "ALL MESH TEX", texTotalMin.ToString("0.00e+0"), texTotalAvg.ToString("0.00e+0"), texTotalMax.ToString("0.00e+0"));
+                w.Write(",{0},{1},{2},{3}", "ALL_TEXTURES", texTotalMin.ToString("0.00e+0"), texTotalAvg.ToString("0.00e+0"), texTotalMax.ToString("0.00e+0"));
             }
             else
             {
@@ -118,14 +118,13 @@ internal class Program
         }
         var results = new List<(String, double, double)>();
         var out_path = "pixel_density.csv";
-        var out_path_sorted = "pixel_density_sorted.md";
-        var out_path_sorted2 = "pixel_density_sorted_textures.md";
+        var out_path_sorted = "pixel_density_sorted.csv";
+        var out_path_sorted2 = "pixel_density_sorted_textures.csv";
         using (TextWriter writer = new StreamWriter(out_path))
         {
-            Console.WriteLine(">>> Current time is {0}", DateTime.Now);
             Console.WriteLine(">>> Starting search for all .nif recursively from {0}", Directory.GetCurrentDirectory());
             Console.WriteLine(">>> Raw results values are calculated only using UVs, results with textures multiple by texture resolution too...");
-            writer.WriteLine("Mesh,MeshShape,Minimum,Median,Maximum,Texture,TexMinimum,TexMedian,TexMaximum");
+            writer.WriteLine("File,MeshShape,Minimum,Median,Maximum,Texture,TexMinimum,TexMedian,TexMaximum");
             string[] paths;
             try
             {
@@ -139,29 +138,28 @@ internal class Program
             foreach (var path in paths)
             {
                 Console.WriteLine("Processing {0}", path);
-                var (one, two) = AnalyzeNif(path, writer);
-                writer.Flush();
-                results.Add((path, one, two));
+                var (avg, tex_avg) = AnalyzeNif(path, writer);
+                results.Add((path, avg, tex_avg));
             }
         }
         results.Sort((one, two) => one.Item2.CompareTo(two.Item2));
         using (TextWriter writer = new StreamWriter(out_path_sorted))
         {
-            writer.WriteLine("### Results sorted by raw UV values (worst to best):");
+            writer.WriteLine("File,Raw Average,Texture Average");
             foreach (var res in results)
             {
                 if (res.Item2 > 0)
-                    writer.WriteLine("* Average of raw: {0}, with texture: {1}, in file: {2}", res.Item2, res.Item3, res.Item1);
+                    writer.WriteLine("{0},{1},{2}", res.Item1, res.Item2.ToString("0.00e+0"), res.Item3.ToString("0.00e+0"));
             }
         }
         results.Sort((one, two) => one.Item3.CompareTo(two.Item3));
         using (TextWriter writer = new StreamWriter(out_path_sorted2))
         {
-            writer.WriteLine("### Results sorted by considering texture resolution (worst to best, only meshes where textures were found):");
+            writer.WriteLine("File,Raw Average,Texture Average");
             foreach (var res in results)
             {
                 if (res.Item3 > 0)
-                    writer.WriteLine("* Average of raw: {0}, with texture: {1}, in file: {2}", res.Item2, res.Item3, res.Item1);
+                    writer.WriteLine("{0},{1},{2}", res.Item1, res.Item2.ToString("0.00e+0"), res.Item3.ToString("0.00e+0"));
             }
         }
         Console.WriteLine(">>> Result files available in {0}, {1}, {2}, opening {0} now!", out_path, out_path_sorted, out_path_sorted2);
