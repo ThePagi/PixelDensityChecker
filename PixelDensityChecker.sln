@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.8.34316.72
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PixelDensityChecker", "PixelDensityChecker\PixelDensityChecker.csproj", "{DF414D13-22C3-45EA-8E16-BDAD42C94102}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{DF414D13-22C3-45EA-8E16-BDAD42C94102}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DF414D13-22C3-45EA-8E16-BDAD42C94102}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DF414D13-22C3-45EA-8E16-BDAD42C94102}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DF414D13-22C3-45EA-8E16-BDAD42C94102}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {FAD48DC3-0872-4BB4-BAC0-38F4B0961EB4}
+	EndGlobalSection
+EndGlobal

@@ -34,12 +34,10 @@ internal class Program
 
     static (double, double) AnalyzeNif(string path, TextWriter w)
     {
-        w.WriteLine("File {0}:", path);
         var nif = new NifFile();
         if (nif.Load(path) != 0)
         {
-            Console.WriteLine("Error loading file.");
-            w.WriteLine("Error loading file.");
+            Console.WriteLine("Error loading file '{0}'", path);
             return (0, 0);
         }
 
@@ -58,46 +56,57 @@ internal class Program
             var verts = nif.GetVertsForShape(shape);
             var uvs = nif.GetUvsForShape(shape);
             var tex_size = 0;
+            var tex_path = nif.GetTexturePathByIndex(shape, 0);
             try
             {
-                var tex_path = nif.GetTexturePathByIndex(shape, 0);
                 var tex = DirectXTexNet.TexHelper.Instance.LoadFromDDSFile(tex_path, DirectXTexNet.DDS_FLAGS.NONE);
                 tex_size = Math.Max(tex.GetMetadata().Width, tex.GetMetadata().Height);
             }
             catch (Exception e)
             {
-                Console.WriteLine($"Can't load texture: {e.Message}");
+                Console.WriteLine($"Can't load texture {tex_path}.");
             }
             var (min, med, max) = AnalyzeShape(tris, verts, uvs);
             totalMin = Math.Min(min, totalMin);
             totalMax = Math.Max(max, totalMax);
             totalAvg += med;
-            w.WriteLine("> * {3} Raw results: Min {0}, Median {1}, Max {2}", min, med, max, shape.name.get());
+            w.Write("{0}", path);
+            w.Write(",{0}", shape.name.get());
+            w.Write(",{0}", min.ToString("0.00e+0"));
+            w.Write(",{0}", med.ToString("0.00e+0"));
+            w.Write(",{0}", max.ToString("0.00e+0"));
+            w.Write(",{0}", tex_path);
             if (tex_size > 0)
             {
                 min *= tex_size;
                 med *= tex_size;
                 max *= tex_size;
                 texTotalMin = Math.Min(min, texTotalMin);
-                texTotalMax = Math.Min(min, texTotalMax);
+                texTotalMax = Math.Max(max, texTotalMax);
                 texTotalAvg += med;
-                w.WriteLine("> * {3} With texture: Min {0}, Median {1}, Max {2} <-- ({4})", min, med, max, shape.name.get(), nif.GetTexturePathByIndex(shape, 0));
+                w.Write(",{0}", min.ToString("0.00e+0"));
+                w.Write(",{0}", med.ToString("0.00e+0"));
+                w.Write(",{0}", max.ToString("0.00e+0"));
             }
+            else {
+                w.Write(",,,");
+            }
+            w.WriteLine();
         }
-        totalAvg /= nif.GetShapes().Count;
-        texTotalAvg /= nif.GetShapes().Count;
-        w.WriteLine("> ");
-        if (totalMax > 0.0)
+        if (nif.GetShapes().Count > 0)
         {
-            w.WriteLine("> **Whole file raw: Min {0}, Avg {1}, Max {2}**", totalMin, totalAvg, totalMax);
+            totalAvg /= nif.GetShapes().Count;
+            texTotalAvg /= nif.GetShapes().Count;
+            w.Write("{0},{1},{2},{3},{4}", path, "WHOLE MESH", totalMin.ToString("0.00e+0"), totalAvg.ToString("0.00e+0"), totalMax.ToString("0.00e+0"));
             if (texTotalMax > 0.0)
             {
-                w.WriteLine("> **Whole file with textures: Min {0}, Avg {1}, Max {2}**", texTotalMin, texTotalAvg, texTotalMax);
+                w.Write(",{0},{1},{2},{3}", "ALL MESH TEX", texTotalMin.ToString("0.00e+0"), texTotalAvg.ToString("0.00e+0"), texTotalMax.ToString("0.00e+0"));
             }
-        }
-        else
-        {
-            w.WriteLine("> No mesh data.");
+            else
+            {
+                w.Write(",,,,");
+            }
+            w.WriteLine();
         }
         return (totalAvg, texTotalAvg);
     }
@@ -108,19 +117,15 @@ internal class Program
             AnalyzeNif(args[0], Console.Out);
         }
         var results = new List<(String, double, double)>();
-        var out_path = "pixel_density.md";
+        var out_path = "pixel_density.csv";
         var out_path_sorted = "pixel_density_sorted.md";
         var out_path_sorted2 = "pixel_density_sorted_textures.md";
         using (TextWriter writer = new StreamWriter(out_path))
         {
-            writer.WriteLine("### Current time is {0}", DateTime.Now);
             Console.WriteLine(">>> Current time is {0}", DateTime.Now);
-            writer.WriteLine("### Starting search for all .nif recursively from {0}", Directory.GetCurrentDirectory());
             Console.WriteLine(">>> Starting search for all .nif recursively from {0}", Directory.GetCurrentDirectory());
-            writer.WriteLine("### Raw results values are calculated only using UVs, results with textures multiple by texture resolution too...");
             Console.WriteLine(">>> Raw results values are calculated only using UVs, results with textures multiple by texture resolution too...");
-            writer.WriteLine();
-            writer.Flush();
+            writer.WriteLine("Mesh,MeshShape,Minimum,Median,Maximum,Texture,TexMinimum,TexMedian,TexMaximum");
             string[] paths;
             try
             {
@@ -135,7 +140,7 @@ internal class Program
             {
                 Console.WriteLine("Processing {0}", path);
                 var (one, two) = AnalyzeNif(path, writer);
-                writer.WriteLine();
+                writer.Flush();
                 results.Add((path, one, two));
             }
         }
